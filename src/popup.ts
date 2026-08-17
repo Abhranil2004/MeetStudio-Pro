@@ -300,14 +300,15 @@ function setMeetStatus(isMeet: boolean, meetCode: string | null, isLive: boolean
 
   if (meetBadge) {
     if (isMeet) {
-      if (isLive) {
-        meetBadge.textContent = meetCode && meetCode !== 'google-meet' ? `Meet: ${meetCode} (Live)` : 'Google Meet (Live)';
+      const cleanCode = meetCode && meetCode !== 'google-meet' && meetCode !== 'home' && meetCode !== '' ? meetCode : null;
+      if (cleanCode) {
+        meetBadge.textContent = isLive ? `Meet: ${cleanCode} (Live)` : `Meet: ${cleanCode}`;
+        meetBadge.style.color = isLive ? '#86efac' : '#818cf8';
+        meetBadge.style.background = isLive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.12)';
+      } else {
+        meetBadge.textContent = 'Google Meet Ready';
         meetBadge.style.color = '#86efac';
         meetBadge.style.background = 'rgba(16, 185, 129, 0.15)';
-      } else {
-        meetBadge.textContent = meetCode && meetCode !== 'google-meet' ? `Meet: ${meetCode} (Lobby)` : 'Google Meet (Lobby)';
-        meetBadge.style.color = '#fde047';
-        meetBadge.style.background = 'rgba(234, 179, 8, 0.15)';
       }
     } else {
       meetBadge.textContent = 'Not in Meet (Required)';
@@ -324,9 +325,18 @@ function setMeetStatus(isMeet: boolean, meetCode: string | null, isLive: boolean
     }
   }
 
+  // Ensure button is ALWAYS enabled whenever on any Google Meet tab!
   if (!isCurrentlyRecording) {
-    if (startBtn) startBtn.disabled = !isMeet;
-    if (saveBtn) saveBtn.disabled = !isMeet;
+    if (startBtn) {
+      startBtn.disabled = !isMeet;
+      startBtn.style.opacity = isMeet ? '1' : '0.5';
+      startBtn.style.cursor = isMeet ? 'pointer' : 'not-allowed';
+    }
+    if (saveBtn) {
+      saveBtn.disabled = !isMeet;
+      saveBtn.style.opacity = isMeet ? '1' : '0.5';
+      saveBtn.style.cursor = isMeet ? 'pointer' : 'not-allowed';
+    }
   }
 }
 

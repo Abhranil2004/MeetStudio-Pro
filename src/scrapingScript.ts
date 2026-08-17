@@ -283,7 +283,7 @@ function createInMeetingUI() {
     top: 16px;
     left: 24px;
     z-index: 9999999;
-    display: ${isMeetingCallLive() ? 'flex' : 'none'};
+    display: flex;
     align-items: center;
     gap: 8px;
     font-family: 'Google Sans', Roboto, -apple-system, sans-serif;
