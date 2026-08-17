@@ -109,7 +109,7 @@ chrome.runtime.onConnect.addListener((port) => {
       const filename =
         (typeof msg.filename === 'string' && msg.filename.trim())
           ? msg.filename
-          : `google-meet-recording-${Date.now()}.webm`
+          : `google-meet-recording-${Date.now()}.mp4`
 
       if (msg.blobUrl) {
         bglog('Saving OFFSCREEN_SAVE via blobUrl', filename)

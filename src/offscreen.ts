@@ -244,10 +244,22 @@ async function prepareAndRecord(baseStream: MediaStream): Promise<void> {
 
   chunks = []
   
-  // Pick reliable WebM mime type
-  let mime = 'video/webm;codecs=vp8,opus'
-  if (!MediaRecorder.isTypeSupported(mime)) {
-    mime = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : ''
+  // Prefer native MP4 encoding (H.264/AVC + AAC), fallback to WebM
+  const preferredMimes = [
+    'video/mp4;codecs=avc1,mp4a.40.2',
+    'video/mp4;codecs=avc1',
+    'video/mp4;codecs=h264',
+    'video/mp4',
+    'video/webm;codecs=vp8,opus',
+    'video/webm'
+  ]
+
+  let mime = ''
+  for (const m of preferredMimes) {
+    if (MediaRecorder.isTypeSupported(m)) {
+      mime = m
+      break
+    }
   }
 
   log('Creating MediaRecorder with MIME:', mime || 'browser-default')
@@ -276,7 +288,7 @@ async function prepareAndRecord(baseStream: MediaStream): Promise<void> {
 
   mediaRecorder.onstop = async () => {
     try {
-      const blobType = mime || 'video/webm'
+      const blobType = mime || 'video/mp4'
       const blob = new Blob(chunks, { type: blobType })
       log('Recording finished. Chunks:', chunks.length, 'Size:', blob.size)
 
@@ -286,7 +298,8 @@ async function prepareAndRecord(baseStream: MediaStream): Promise<void> {
         suffix = inferSuffixFromActiveTabUrl(tabs[0]?.url || null)
       } catch {}
 
-      const filename = `google-meet-recording-${suffix}-${Date.now()}.webm`
+      const ext = mime.includes('mp4') ? 'mp4' : 'mp4'
+      const filename = `google-meet-recording-${suffix}-${Date.now()}.${ext}`
       const blobUrl = URL.createObjectURL(blob)
       getPort().postMessage({ type: 'OFFSCREEN_SAVE', filename, blobUrl })
     } catch (e) {
