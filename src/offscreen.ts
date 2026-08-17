@@ -106,10 +106,11 @@ async function maybeGetMicStream(): Promise<MediaStream | null> {
 
 let activeTabSourceNode: MediaStreamAudioSourceNode | null = null
 let activeMicSourceNode: MediaStreamAudioSourceNode | null = null
+let activeTabAudioElement: HTMLAudioElement | null = null
 
 /**
  * Mix Tab and Mic audio streams using Web Audio API.
- * Ensures audio playback to speakers and feeds recorder destination.
+ * Uses official Chrome tabCapture HTMLAudioElement playback to keep audio pipeline active.
  */
 async function mixAudioStreams(tabStream: MediaStream, micStream: MediaStream | null): Promise<MediaStream> {
   const tabAudioTracks = tabStream.getAudioTracks()
@@ -120,9 +121,26 @@ async function mixAudioStreams(tabStream: MediaStream, micStream: MediaStream | 
   tabAudioTracks.forEach(t => { t.enabled = true })
   micAudioTracks.forEach(t => { t.enabled = true })
 
+  // 1. Official Chrome tabCapture audio playback: keeps tab audio audible to the user
+  if (tabAudioTracks.length > 0) {
+    try {
+      if (!activeTabAudioElement) {
+        activeTabAudioElement = document.createElement('audio')
+        activeTabAudioElement.autoplay = true
+        document.body.appendChild(activeTabAudioElement)
+      }
+      activeTabAudioElement.srcObject = new MediaStream([tabAudioTracks[0]])
+      activeTabAudioElement.play().catch(e => log('tabAudioElement.play error:', e))
+      log('tabCapture HTML5 Audio element active for speaker playback')
+    } catch (e) {
+      log('Could not setup tabAudioElement:', e)
+    }
+  }
+
+  // 2. Mix into Web Audio Destination for MediaRecorder
   try {
     const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext
-    const ctx = new AC()
+    const ctx = new AC({ sampleRate: 48000 })
     activeAudioCtx = ctx
 
     if (ctx.state === 'suspended') {
@@ -131,22 +149,18 @@ async function mixAudioStreams(tabStream: MediaStream, micStream: MediaStream | 
 
     const destination = ctx.createMediaStreamDestination()
 
-    // Route tab audio (meeting sound from all participants)
+    // Route Tab Audio into destination
     if (tabAudioTracks.length > 0) {
       const tabSource = ctx.createMediaStreamSource(tabStream)
       activeTabSourceNode = tabSource
       const tabGain = ctx.createGain()
       tabGain.gain.setValueAtTime(1.0, ctx.currentTime)
       tabSource.connect(tabGain)
-      
-      // Feed to recording destination
       tabGain.connect(destination)
-      // Feed to speakers so user can hear call without interruption
-      try { tabGain.connect(ctx.destination) } catch {}
-      log('Tab audio successfully connected to recording destination & playback')
+      log('Tab audio routed to recording destination')
     }
 
-    // Route mic audio (user voice)
+    // Route Mic Audio into destination
     if (micAudioTracks.length > 0 && micStream) {
       const micSource = ctx.createMediaStreamSource(micStream)
       activeMicSourceNode = micSource
@@ -155,13 +169,11 @@ async function mixAudioStreams(tabStream: MediaStream, micStream: MediaStream | 
       micGain.gain.setValueAtTime(initialGain, ctx.currentTime)
       activeMicGainNode = micGain
       micSource.connect(micGain)
-      
-      // Feed mic into recording destination (do NOT feed mic to ctx.destination to prevent local feedback echo)
       micGain.connect(destination)
-      log('Mic audio successfully connected to recording destination. Initial gain:', initialGain)
+      log('Mic audio routed to recording destination with initial gain:', initialGain)
     }
 
-    // Keep-alive oscillator ensures the Web Audio clock pumps continuously
+    // Keep-alive oscillator keeps audio buffer ticking continuously
     const keepAliveOsc = ctx.createOscillator()
     const keepAliveGain = ctx.createGain()
     keepAliveGain.gain.setValueAtTime(0.00001, ctx.currentTime)
@@ -170,23 +182,20 @@ async function mixAudioStreams(tabStream: MediaStream, micStream: MediaStream | 
     keepAliveOsc.start()
 
     const mixedAudioTracks = destination.stream.getAudioTracks()
-    log('Web Audio pipeline active. Mixed audio tracks:', mixedAudioTracks.length)
-
     mixedAudioTracks.forEach(t => { t.enabled = true })
+    log('Web Audio mixing complete. Total output audio tracks:', mixedAudioTracks.length)
 
     return new MediaStream([
       ...tabStream.getVideoTracks(),
       ...mixedAudioTracks
     ])
   } catch (err) {
-    log('Audio mixing error, using fallback stream:', err)
-    // Fallback: direct combine
-    const fallbackTracks: MediaStreamTrack[] = [
+    log('Web Audio mixing failed, falling back to direct tab stream:', err)
+    return new MediaStream([
       ...tabStream.getVideoTracks(),
       ...tabStream.getAudioTracks(),
       ...(micStream ? micStream.getAudioTracks() : [])
-    ]
-    return new MediaStream(fallbackTracks)
+    ])
   }
 }
 
