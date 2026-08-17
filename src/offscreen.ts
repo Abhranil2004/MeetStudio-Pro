@@ -146,7 +146,7 @@ async function mixAudioStreams(tabStream: MediaStream, micStream: MediaStream | 
     ])
   }
 
-  // 3. If microphone is active, mix using Web Audio API
+  // 3. Mix Tab Audio + Microphone Audio using active Web Audio hardware graph
   try {
     const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext
     const ctx = new AC()
@@ -158,18 +158,23 @@ async function mixAudioStreams(tabStream: MediaStream, micStream: MediaStream | 
 
     const destination = ctx.createMediaStreamDestination()
 
-    // Route tab audio into recording destination
+    // Route tab audio into recording destination & hardware speakers
     if (tabAudioTracks.length > 0) {
       const tabSource = ctx.createMediaStreamSource(tabStream)
       activeTabSourceNode = tabSource
       const tabGain = ctx.createGain()
       tabGain.gain.setValueAtTime(1.0, ctx.currentTime)
       tabSource.connect(tabGain)
+      
+      // Feed to MediaRecorder destination
       tabGain.connect(destination)
+      // Feed to physical speakers: THIS FORCES CHROMIUM'S AUDIO GRAPH TO PULL SAMPLES!
+      try { tabGain.connect(ctx.destination) } catch {}
+      log('Tab audio connected to recorder destination & hardware output')
     }
 
     // Route mic audio into recording destination
-    if (micAudioTracks.length > 0) {
+    if (micAudioTracks.length > 0 && micStream) {
       const micSource = ctx.createMediaStreamSource(micStream)
       activeMicSourceNode = micSource
       const micGain = ctx.createGain()
@@ -177,13 +182,25 @@ async function mixAudioStreams(tabStream: MediaStream, micStream: MediaStream | 
       micGain.gain.setValueAtTime(initialGain, ctx.currentTime)
       activeMicGainNode = micGain
       micSource.connect(micGain)
+      
+      // Feed to MediaRecorder destination (not ctx.destination to avoid local mic echo)
       micGain.connect(destination)
+      log('Mic audio connected to recorder destination. Initial gain:', initialGain)
     }
+
+    // Keep-alive oscillator connected to ctx.destination ensures continuous hardware sample clock
+    const osc = ctx.createOscillator()
+    const oscGain = ctx.createGain()
+    oscGain.gain.setValueAtTime(0.00001, ctx.currentTime)
+    osc.connect(oscGain)
+    oscGain.connect(ctx.destination)
+    oscGain.connect(destination)
+    osc.start()
 
     const mixedAudioTracks = destination.stream.getAudioTracks()
     if (mixedAudioTracks.length > 0) {
       mixedAudioTracks[0].enabled = true
-      log('Mixed Tab + Mic audio stream created successfully')
+      log('Web Audio mixer active with hardware clock. Output tracks:', mixedAudioTracks.length)
       return new MediaStream([
         ...tabStream.getVideoTracks(),
         mixedAudioTracks[0]
