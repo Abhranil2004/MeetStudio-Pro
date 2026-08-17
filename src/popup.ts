@@ -257,12 +257,12 @@ async function refreshMicButton() {
   }
 }
 
-// Inspect active tab URL - STRICT Google Meet Validation
+// Inspect active tab URL - STRICT Google Meet & Live Call Validation
 async function checkActiveTab(): Promise<chrome.tabs.Tab | null> {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.url) {
-      setMeetStatus(false, null);
+      setMeetStatus(false, null, false);
       return null;
     }
 
@@ -271,26 +271,44 @@ async function checkActiveTab(): Promise<chrome.tabs.Tab | null> {
 
     if (isMeet) {
       const code = url.pathname.replace(/^\//, '').split('?')[0];
-      setMeetStatus(true, code || 'google-meet');
+
+      // Query content script to check if the call is actively live inside the room
+      if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, { type: 'QUERY_MEET_STATUS' }, (res) => {
+          if (!chrome.runtime.lastError && res) {
+            setMeetStatus(true, res.meetingId || code || 'google-meet', !!res.isLive);
+          } else {
+            setMeetStatus(true, code || 'google-meet', true);
+          }
+        });
+      } else {
+        setMeetStatus(true, code || 'google-meet', true);
+      }
       return tab;
     } else {
-      setMeetStatus(false, null);
+      setMeetStatus(false, null, false);
       return tab;
     }
   } catch {
-    setMeetStatus(false, null);
+    setMeetStatus(false, null, false);
     return null;
   }
 }
 
-function setMeetStatus(isMeet: boolean, meetCode: string | null) {
+function setMeetStatus(isMeet: boolean, meetCode: string | null, isLive: boolean = true) {
   isCurrentlyOnGoogleMeet = isMeet;
 
   if (meetBadge) {
     if (isMeet) {
-      meetBadge.textContent = meetCode && meetCode !== 'google-meet' ? `Meet: ${meetCode}` : 'Google Meet';
-      meetBadge.style.color = '#818cf8';
-      meetBadge.style.background = 'rgba(99, 102, 241, 0.12)';
+      if (isLive) {
+        meetBadge.textContent = meetCode && meetCode !== 'google-meet' ? `Meet: ${meetCode} (Live)` : 'Google Meet (Live)';
+        meetBadge.style.color = '#86efac';
+        meetBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+      } else {
+        meetBadge.textContent = meetCode && meetCode !== 'google-meet' ? `Meet: ${meetCode} (Lobby)` : 'Google Meet (Lobby)';
+        meetBadge.style.color = '#fde047';
+        meetBadge.style.background = 'rgba(234, 179, 8, 0.15)';
+      }
     } else {
       meetBadge.textContent = 'Not in Meet (Required)';
       meetBadge.style.color = '#f59e0b';
@@ -381,6 +399,9 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
   if (msg?.type === 'MEET_MIC_MUTE_STATE') {
     updateMuteButtonUI(!!msg.muted);
+  }
+  if (msg?.type === 'MEET_LIVE_STATE') {
+    setMeetStatus(true, msg.meetingId, !!msg.isLive);
   }
   if (msg?.type === 'RECORDING_SAVED') {
     showToast(`Video saved: ${msg.filename || 'recording.webm'}`);

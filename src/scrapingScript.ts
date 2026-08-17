@@ -210,6 +210,65 @@ window.addEventListener('keydown', (e) => {
 // High-frequency check (every 300ms) to ensure instant synchronization
 setInterval(syncMicMuteState, 300)
 
+// Meeting ID Analyzer & In-Call Live Detector
+function getGoogleMeetingId(): string | null {
+  try {
+    const path = window.location.pathname;
+    const match = path.match(/\/([a-z]{3}-[a-z]{4}-[a-z]{3})/i) || path.match(/\/([a-z0-9_-]{9,12})/i);
+    if (match && match[1]) {
+      return match[1].toLowerCase();
+    }
+    const elem = document.querySelector('[data-meeting-code], [data-unresolved-meeting-id]');
+    if (elem) {
+      const attr = elem.getAttribute('data-meeting-code') || elem.getAttribute('data-unresolved-meeting-id');
+      if (attr) return attr.toLowerCase();
+    }
+  } catch {}
+  return null;
+}
+
+function isMeetingCallLive(): boolean {
+  try {
+    const leaveBtn = document.querySelector('button[aria-label*="Leave call" i], button[aria-label*="leave" i], [data-call-ended]');
+    const callControls = document.querySelector('[role="region"][aria-label*="controls" i], [data-is-muted]');
+    return !!(leaveBtn || callControls);
+  } catch {
+    return false;
+  }
+}
+
+let lastLiveState = false;
+let currentMeetingId = getGoogleMeetingId();
+
+function checkLiveMeetingState() {
+  const isLive = isMeetingCallLive();
+  const meetId = getGoogleMeetingId() || currentMeetingId;
+
+  if (isLive !== lastLiveState || meetId !== currentMeetingId) {
+    lastLiveState = isLive;
+    currentMeetingId = meetId;
+
+    const hudContainer = document.getElementById('gmeet-rec-hud-container');
+    const label = document.getElementById('gmeet-rec-label');
+
+    if (isLive) {
+      if (hudContainer) hudContainer.style.display = 'flex';
+      if (label && !inMeetingTimerInterval) {
+        label.textContent = meetId ? `Record Meeting (${meetId})` : 'Record Meeting';
+      }
+      showMeetToast(`⚡ Google Meet ${meetId ? `(${meetId})` : ''} is LIVE — Recording Ready`);
+    } else {
+      if (hudContainer) hudContainer.style.display = 'none';
+    }
+
+    chrome.runtime.sendMessage({
+      type: 'MEET_LIVE_STATE',
+      isLive,
+      meetingId: meetId
+    }).catch(() => {});
+  }
+}
+
 // In-Meeting Google Meet Native Recording HUD & UI Overlay
 let inMeetingTimerInterval: number | null = null
 let inMeetingStartTime = 0
@@ -224,7 +283,7 @@ function createInMeetingUI() {
     top: 16px;
     left: 24px;
     z-index: 9999999;
-    display: flex;
+    display: ${isMeetingCallLive() ? 'flex' : 'none'};
     align-items: center;
     gap: 8px;
     font-family: 'Google Sans', Roboto, -apple-system, sans-serif;
@@ -263,9 +322,10 @@ function createInMeetingUI() {
     transition: all 0.25s ease;
   `
 
+  const meetId = getGoogleMeetingId();
   const label = document.createElement('span')
   label.id = 'gmeet-rec-label'
-  label.textContent = 'Record Meeting'
+  label.textContent = meetId ? `Record Meeting (${meetId})` : 'Record Meeting'
   label.style.cssText = `
     letter-spacing: -0.2px;
   `
@@ -334,13 +394,15 @@ function updateInMeetingHUD(recording: boolean, startTime?: number) {
 
   if (!pill || !dot || !label || !timerSpan) return
 
+  const meetId = getGoogleMeetingId() || currentMeetingId;
+
   if (recording) {
     pill.style.border = '1px solid rgba(234, 67, 53, 0.5)'
     dot.style.backgroundColor = '#ea4335'
     dot.style.boxShadow = '0 0 8px #ea4335'
     dot.style.animation = 'meet-pulse 1.2s infinite'
 
-    label.textContent = 'REC'
+    label.textContent = meetId ? `REC (${meetId})` : 'REC'
     timerSpan.style.display = 'inline'
     if (micStatusSpan) {
       micStatusSpan.style.display = 'inline'
@@ -372,7 +434,7 @@ function updateInMeetingHUD(recording: boolean, startTime?: number) {
     dot.style.boxShadow = 'none'
     dot.style.animation = 'none'
 
-    label.textContent = 'Record Meeting'
+    label.textContent = meetId ? `Record Meeting (${meetId})` : 'Record Meeting'
     timerSpan.style.display = 'none'
     if (micStatusSpan) {
       micStatusSpan.style.display = 'none'
@@ -432,6 +494,7 @@ document.head.appendChild(styleTag)
 // Initialize in-meeting HUD when joining call
 function initMeetingHUD() {
   createInMeetingUI()
+  checkLiveMeetingState()
   chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATUS' }, (res) => {
     if (!chrome.runtime.lastError && res) {
       updateInMeetingHUD(!!res.recording, res.startTime)
@@ -439,8 +502,8 @@ function initMeetingHUD() {
   })
 }
 
-// Sync HUD on recording state broadcast
-chrome.runtime.onMessage.addListener((msg) => {
+// Sync HUD on recording state broadcast and handle popup queries
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === 'RECORDING_STATE') {
     updateInMeetingHUD(!!msg.recording, msg.startTime)
     if (msg.recording) {
@@ -457,14 +520,24 @@ chrome.runtime.onMessage.addListener((msg) => {
     }
     showMeetToast(isMuted ? '🔇 Microphone Muted in recording' : '🎙️ Microphone Live in recording')
   }
+  if (msg?.type === 'QUERY_MEET_STATUS') {
+    sendResponse({
+      isLive: isMeetingCallLive(),
+      meetingId: getGoogleMeetingId() || currentMeetingId
+    })
+    return true
+  }
 })
 
-// Auto-inject HUD when page loads
+// Auto-inject HUD and start live state poller
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initMeetingHUD)
 } else {
   initMeetingHUD()
 }
+
+// High-frequency live state poller (checks every 500ms)
+setInterval(checkLiveMeetingState, 500)
 
 // Auto-stop when user clicks Leave Call (hang up)
 window.addEventListener('click', (e) => {
@@ -477,6 +550,7 @@ window.addEventListener('click', (e) => {
       }
     })
   }
+  setTimeout(checkLiveMeetingState, 200)
 }, true)
 
 console.log('MeetStudio in-meeting controller loaded')
