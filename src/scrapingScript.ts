@@ -237,34 +237,48 @@ function isMeetingCallLive(): boolean {
   }
 }
 
+function isInsideMeetingRoom(): boolean {
+  try {
+    const path = window.location.pathname;
+    return /\/([a-z]{3}-[a-z]{4}-[a-z]{3})/i.test(path) || (path.length > 5 && path !== '/' && !path.startsWith('/landing') && !path.startsWith('/home'));
+  } catch {
+    return false;
+  }
+}
+
 let lastLiveState = false;
 let currentMeetingId = getGoogleMeetingId();
 
 function checkLiveMeetingState() {
   const isLive = isMeetingCallLive();
   const meetId = getGoogleMeetingId() || currentMeetingId;
+  const inRoom = isInsideMeetingRoom();
+
+  const hudContainer = document.getElementById('gmeet-rec-hud-container');
+  const label = document.getElementById('gmeet-rec-label');
+
+  if (inRoom) {
+    if (hudContainer) hudContainer.style.display = 'flex';
+    if (label && !inMeetingTimerInterval) {
+      label.textContent = meetId ? `Record Meeting (${meetId})` : 'Record Meeting';
+    }
+  } else {
+    // Hide HUD completely when on Google Meet home page
+    if (hudContainer) hudContainer.style.display = 'none';
+  }
 
   if (isLive !== lastLiveState || meetId !== currentMeetingId) {
     lastLiveState = isLive;
     currentMeetingId = meetId;
 
-    const hudContainer = document.getElementById('gmeet-rec-hud-container');
-    const label = document.getElementById('gmeet-rec-label');
-
-    if (isLive) {
-      if (hudContainer) hudContainer.style.display = 'flex';
-      if (label && !inMeetingTimerInterval) {
-        label.textContent = meetId ? `Record Meeting (${meetId})` : 'Record Meeting';
-      }
+    if (isLive && inRoom) {
       showMeetToast(`⚡ Google Meet ${meetId ? `(${meetId})` : ''} is LIVE — Recording Ready`);
-    } else {
-      if (hudContainer) hudContainer.style.display = 'none';
     }
 
     chrome.runtime.sendMessage({
       type: 'MEET_LIVE_STATE',
-      isLive,
-      meetingId: meetId
+      isLive: isLive && inRoom,
+      meetingId: inRoom ? meetId : null
     }).catch(() => {});
   }
 }
@@ -283,7 +297,7 @@ function createInMeetingUI() {
     top: 16px;
     left: 24px;
     z-index: 9999999;
-    display: flex;
+    display: ${isInsideMeetingRoom() ? 'flex' : 'none'};
     align-items: center;
     gap: 8px;
     font-family: 'Google Sans', Roboto, -apple-system, sans-serif;

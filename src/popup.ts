@@ -270,19 +270,27 @@ async function checkActiveTab(): Promise<chrome.tabs.Tab | null> {
     const isMeet = url.hostname.includes('meet.google.com');
 
     if (isMeet) {
-      const code = url.pathname.replace(/^\//, '').split('?')[0];
+      const path = url.pathname.replace(/^\//, '').split('?')[0];
+      const match = path.match(/([a-z]{3}-[a-z]{4}-[a-z]{3})/i);
+      const meetingCode = match ? match[1].toLowerCase() : (path.length > 5 && path !== 'landing' ? path : null);
+
+      if (!meetingCode) {
+        // User is on Google Meet Home / Lobby without an active meeting room
+        setMeetStatus(true, null, false);
+        return tab;
+      }
 
       // Query content script to check if the call is actively live inside the room
       if (tab.id) {
         chrome.tabs.sendMessage(tab.id, { type: 'QUERY_MEET_STATUS' }, (res) => {
           if (!chrome.runtime.lastError && res) {
-            setMeetStatus(true, res.meetingId || code || 'google-meet', !!res.isLive);
+            setMeetStatus(true, res.meetingId || meetingCode, !!res.isLive);
           } else {
-            setMeetStatus(true, code || 'google-meet', true);
+            setMeetStatus(true, meetingCode, true);
           }
         });
       } else {
-        setMeetStatus(true, code || 'google-meet', true);
+        setMeetStatus(true, meetingCode, true);
       }
       return tab;
     } else {
@@ -296,19 +304,18 @@ async function checkActiveTab(): Promise<chrome.tabs.Tab | null> {
 }
 
 function setMeetStatus(isMeet: boolean, meetCode: string | null, isLive: boolean = true) {
-  isCurrentlyOnGoogleMeet = isMeet;
+  isCurrentlyOnGoogleMeet = isMeet && !!meetCode;
 
   if (meetBadge) {
     if (isMeet) {
-      const cleanCode = meetCode && meetCode !== 'google-meet' && meetCode !== 'home' && meetCode !== '' ? meetCode : null;
-      if (cleanCode) {
-        meetBadge.textContent = isLive ? `Meet: ${cleanCode} (Live)` : `Meet: ${cleanCode}`;
+      if (meetCode) {
+        meetBadge.textContent = isLive ? `Meet: ${meetCode} (Live)` : `Meet: ${meetCode}`;
         meetBadge.style.color = isLive ? '#86efac' : '#818cf8';
         meetBadge.style.background = isLive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.12)';
       } else {
-        meetBadge.textContent = 'Google Meet Ready';
-        meetBadge.style.color = '#86efac';
-        meetBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+        meetBadge.textContent = 'Lobby (Join a call)';
+        meetBadge.style.color = '#fde047';
+        meetBadge.style.background = 'rgba(234, 179, 8, 0.15)';
       }
     } else {
       meetBadge.textContent = 'Not in Meet (Required)';
@@ -318,24 +325,36 @@ function setMeetStatus(isMeet: boolean, meetCode: string | null, isLive: boolean
   }
 
   if (meetNotice) {
-    if (isMeet) {
+    if (isMeet && !meetCode) {
+      meetNotice.classList.add('visible');
+      const noticeTitle = meetNotice.querySelector('strong');
+      const noticeText = meetNotice.querySelector('p');
+      if (noticeTitle) noticeTitle.textContent = 'Google Meet Lobby Detected';
+      if (noticeText) noticeText.textContent = 'Please start or join a meeting call (click "+ New" or enter a code) to enable HD recording.';
+    } else if (isMeet && meetCode) {
       meetNotice.classList.remove('visible');
     } else {
       meetNotice.classList.add('visible');
+      const noticeTitle = meetNotice.querySelector('strong');
+      const noticeText = meetNotice.querySelector('p');
+      if (noticeTitle) noticeTitle.textContent = 'Google Meet Required';
+      if (noticeText) noticeText.textContent = 'HD Recording & Live Transcripts are exclusively designed for Google Meet calls.';
     }
   }
 
-  // Ensure button is ALWAYS enabled whenever on any Google Meet tab!
+  // Only enable when inside an actual meeting room!
+  const canRecord = isMeet && !!meetCode;
   if (!isCurrentlyRecording) {
     if (startBtn) {
-      startBtn.disabled = !isMeet;
-      startBtn.style.opacity = isMeet ? '1' : '0.5';
-      startBtn.style.cursor = isMeet ? 'pointer' : 'not-allowed';
+      startBtn.disabled = !canRecord;
+      startBtn.style.opacity = canRecord ? '1' : '0.45';
+      startBtn.style.cursor = canRecord ? 'pointer' : 'not-allowed';
+      startBtn.title = canRecord ? 'Start HD Recording' : 'Please join or start a Google Meet call first';
     }
     if (saveBtn) {
-      saveBtn.disabled = !isMeet;
-      saveBtn.style.opacity = isMeet ? '1' : '0.5';
-      saveBtn.style.cursor = isMeet ? 'pointer' : 'not-allowed';
+      saveBtn.disabled = !canRecord;
+      saveBtn.style.opacity = canRecord ? '1' : '0.45';
+      saveBtn.style.cursor = canRecord ? 'pointer' : 'not-allowed';
     }
   }
 }
