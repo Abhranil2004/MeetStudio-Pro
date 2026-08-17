@@ -115,10 +115,14 @@ function crc32(buf) {
 }
 
 const distDir = path.join(__dirname, '..', 'dist');
-const outZip = path.join(__dirname, '..', 'meetstudio-extension.zip');
+const outZipRoot = path.join(__dirname, '..', 'meetstudio-extension.zip');
+const outZipDist = path.join(__dirname, '..', 'dist', 'meetstudio-extension.zip');
 
 if (fs.existsSync(distDir)) {
-  createZip(distDir, outZip);
+  createZip(distDir, outZipRoot);
+  try {
+    fs.copyFileSync(outZipRoot, outZipDist);
+  } catch {}
 } else {
   console.error('[Package] dist directory not found! Run webpack build first.');
   process.exit(1);

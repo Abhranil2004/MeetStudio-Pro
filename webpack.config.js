@@ -33,7 +33,8 @@ module.exports = {
         { from: 'manifest.json',  to: 'manifest.json' },
         { from: 'popup.html',     to: 'popup.html' },
         { from: 'offscreen.html', to: 'offscreen.html', noErrorOnMissing: true },
-        { from: 'micsetup.html', to: 'micsetup.html' },
+        { from: 'micsetup.html',  to: 'micsetup.html' },
+        { from: 'index.html',     to: 'index.html', noErrorOnMissing: true },
       ]
     })
   ]
