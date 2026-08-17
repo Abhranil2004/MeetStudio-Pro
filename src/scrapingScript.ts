@@ -286,71 +286,89 @@ function checkLiveMeetingState() {
 // In-Meeting Google Meet Native Recording HUD & UI Overlay
 let inMeetingTimerInterval: number | null = null
 let inMeetingStartTime = 0
+let isLocalRecordingActive = false
 
 function createInMeetingUI() {
   if (document.getElementById('gmeet-rec-hud-container')) return
+
+  // Retrieve saved position or default to top-left
+  let savedTop = localStorage.getItem('meet_hud_top') || '16px'
+  let savedLeft = localStorage.getItem('meet_hud_left') || '24px'
 
   const container = document.createElement('div')
   container.id = 'gmeet-rec-hud-container'
   container.style.cssText = `
     position: fixed;
-    top: 16px;
-    left: 24px;
+    top: ${savedTop};
+    left: ${savedLeft};
     z-index: 9999999;
     display: ${isInsideMeetingRoom() ? 'flex' : 'none'};
     align-items: center;
     gap: 8px;
     font-family: 'Google Sans', Roboto, -apple-system, sans-serif;
     user-select: none;
-    pointer-events: auto;
+    cursor: grab;
+    touch-action: none;
   `
 
-  const pill = document.createElement('button')
+  const pill = document.createElement('div')
   pill.id = 'gmeet-rec-pill'
   pill.style.cssText = `
     display: flex;
     align-items: center;
     gap: 9px;
-    background: rgba(18, 20, 28, 0.88);
+    background: rgba(18, 20, 28, 0.92);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 9999px;
-    padding: 7px 16px;
+    padding: 8px 18px;
     color: #ffffff;
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  `
+
+  // Drag icon
+  const dragHandle = document.createElement('span')
+  dragHandle.id = 'gmeet-rec-drag-handle'
+  dragHandle.textContent = '⠿'
+  dragHandle.style.cssText = `
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: grab;
+    margin-right: -2px;
   `
 
   const dot = document.createElement('span')
   dot.id = 'gmeet-rec-dot'
   dot.style.cssText = `
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
-    background-color: #64748b;
+    background-color: #94a3b8;
     display: inline-block;
     transition: all 0.25s ease;
   `
 
-  const meetId = getGoogleMeetingId();
+  const meetId = getGoogleMeetingId() || currentMeetingId
   const label = document.createElement('span')
   label.id = 'gmeet-rec-label'
   label.textContent = meetId ? `Record Meeting (${meetId})` : 'Record Meeting'
   label.style.cssText = `
     letter-spacing: -0.2px;
+    font-weight: 600;
   `
 
   const timerSpan = document.createElement('span')
   timerSpan.id = 'gmeet-rec-timer'
   timerSpan.style.cssText = `
     display: none;
-    font-family: 'Roboto Mono', monospace;
-    font-size: 12.5px;
-    font-weight: 600;
+    font-family: 'Roboto Mono', 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
     color: #fda4af;
     letter-spacing: 0.5px;
   `
@@ -362,34 +380,97 @@ function createInMeetingUI() {
     font-size: 11px;
     font-weight: 600;
     margin-left: 2px;
-    padding: 2px 7px;
+    padding: 2px 8px;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.12);
     transition: all 0.2s ease;
   `
 
+  pill.appendChild(dragHandle)
   pill.appendChild(dot)
   pill.appendChild(label)
   pill.appendChild(timerSpan)
   pill.appendChild(micStatusSpan)
 
-  pill.addEventListener('mouseenter', () => {
-    pill.style.background = 'rgba(30, 34, 48, 0.95)'
-    pill.style.transform = 'translateY(-1px) scale(1.02)'
-    pill.style.boxShadow = '0 12px 36px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.15)'
-  })
-  pill.addEventListener('mouseleave', () => {
-    pill.style.background = 'rgba(18, 20, 28, 0.88)'
-    pill.style.transform = 'translateY(0) scale(1.0)'
-    pill.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)'
-  })
+  // Drag-and-drop movement logic
+  let isDragging = false
+  let hasMoved = false
+  let startX = 0
+  let startY = 0
+  let initialLeft = 0
+  let initialTop = 0
 
-  pill.addEventListener('click', () => {
+  const onMouseDown = (e: MouseEvent) => {
+    isDragging = true
+    hasMoved = false
+    startX = e.clientX
+    startY = e.clientY
+    const rect = container.getBoundingClientRect()
+    initialLeft = rect.left
+    initialTop = rect.top
+    container.style.cursor = 'grabbing'
+    pill.style.cursor = 'grabbing'
+    dragHandle.style.cursor = 'grabbing'
+    e.preventDefault()
+  }
+
+  const onMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return
+    const dx = e.clientX - startX
+    const dy = e.clientY - startY
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      hasMoved = true
+    }
+
+    let newLeft = Math.max(10, Math.min(window.innerWidth - container.offsetWidth - 10, initialLeft + dx))
+    let newTop = Math.max(10, Math.min(window.innerHeight - container.offsetHeight - 10, initialTop + dy))
+
+    container.style.left = `${newLeft}px`
+    container.style.top = `${newTop}px`
+  }
+
+  const onMouseUp = () => {
+    if (!isDragging) return
+    isDragging = false
+    container.style.cursor = 'grab'
+    pill.style.cursor = 'pointer'
+    dragHandle.style.cursor = 'grab'
+
+    if (hasMoved) {
+      localStorage.setItem('meet_hud_top', container.style.top)
+      localStorage.setItem('meet_hud_left', container.style.left)
+    }
+  }
+
+  container.addEventListener('mousedown', onMouseDown)
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
+
+  // Click to start / stop recording
+  pill.addEventListener('click', (e) => {
+    if (hasMoved) {
+      e.stopPropagation()
+      return
+    }
+
+    // Instantly toggle visual state so user sees immediate blinking red dot and timer
+    const willStart = !isLocalRecordingActive
+    updateInMeetingHUD(willStart, Date.now())
+
+    if (willStart) {
+      showMeetToast('🔴 Starting HD Meeting Recording...')
+    }
+
     chrome.runtime.sendMessage({ type: 'CONTENT_TOGGLE_RECORDING' }, (res) => {
       if (res?.action === 'started') {
-        showMeetToast('🔴 Google Meet Recording active')
+        updateInMeetingHUD(true, Date.now())
+        showMeetToast('🔴 Google Meet Recording LIVE')
       } else if (res?.action === 'stopped') {
+        updateInMeetingHUD(false)
         showMeetToast('⏹ Recording saved to Downloads')
+      } else if (res?.error) {
+        updateInMeetingHUD(false)
+        showMeetToast(`Recording error: ${res.error}`)
       }
     })
   })
@@ -400,6 +481,7 @@ function createInMeetingUI() {
 
 function updateInMeetingHUD(recording: boolean, startTime?: number) {
   createInMeetingUI()
+  isLocalRecordingActive = recording
   const pill = document.getElementById('gmeet-rec-pill')
   const dot = document.getElementById('gmeet-rec-dot')
   const label = document.getElementById('gmeet-rec-label')
@@ -411,10 +493,13 @@ function updateInMeetingHUD(recording: boolean, startTime?: number) {
   const meetId = getGoogleMeetingId() || currentMeetingId;
 
   if (recording) {
-    pill.style.border = '1px solid rgba(234, 67, 53, 0.5)'
-    dot.style.backgroundColor = '#ea4335'
-    dot.style.boxShadow = '0 0 8px #ea4335'
-    dot.style.animation = 'meet-pulse 1.2s infinite'
+    pill.style.background = 'rgba(28, 18, 22, 0.95)'
+    pill.style.border = '1.5px solid #ef4444'
+    pill.style.boxShadow = '0 0 20px rgba(239, 68, 68, 0.5), 0 8px 32px rgba(0, 0, 0, 0.6)'
+    
+    dot.style.backgroundColor = '#ef4444'
+    dot.style.boxShadow = '0 0 12px #ef4444'
+    dot.style.animation = 'meet-pulse 0.9s infinite alternate'
 
     label.textContent = meetId ? `REC (${meetId})` : 'REC'
     timerSpan.style.display = 'inline'
@@ -443,8 +528,11 @@ function updateInMeetingHUD(recording: boolean, startTime?: number) {
     updateTimer()
     inMeetingTimerInterval = window.setInterval(updateTimer, 500)
   } else {
-    pill.style.border = '1px solid rgba(255, 255, 255, 0.15)'
-    dot.style.backgroundColor = '#9aa0a6'
+    pill.style.background = 'rgba(18, 20, 28, 0.92)'
+    pill.style.border = '1px solid rgba(255, 255, 255, 0.18)'
+    pill.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)'
+    
+    dot.style.backgroundColor = '#94a3b8'
     dot.style.boxShadow = 'none'
     dot.style.animation = 'none'
 

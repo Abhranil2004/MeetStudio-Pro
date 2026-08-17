@@ -56,6 +56,39 @@ async function ensureOffscreen(): Promise<void> {
   throw new Error('Offscreen did not become ready')
 }
 
+function broadcastRecordingState(recording: boolean, startTime?: number) {
+  lastKnownRecording = recording
+  recordingStartTime = recording ? (startTime && startTime > 0 ? startTime : Date.now()) : 0
+  setBadge(recording)
+  try {
+    (chrome.storage as any)?.session?.set?.({
+      recording: lastKnownRecording,
+      recordingStartTime
+    }).catch?.(() => {})
+  } catch {}
+
+  // Broadcast to popups
+  chrome.runtime.sendMessage({
+    type: 'RECORDING_STATE',
+    recording: lastKnownRecording,
+    startTime: recordingStartTime
+  }).catch(() => {})
+
+  // Broadcast to all Google Meet tabs
+  chrome.tabs.query({ url: 'https://meet.google.com/*' }, (tabs) => {
+    if (chrome.runtime.lastError || !tabs) return
+    for (const t of tabs) {
+      if (t.id) {
+        chrome.tabs.sendMessage(t.id, {
+          type: 'RECORDING_STATE',
+          recording: lastKnownRecording,
+          startTime: recordingStartTime
+        }).catch(() => {})
+      }
+    }
+  })
+}
+
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'offscreen') return
   bglog('Offscreen connected')
@@ -69,20 +102,7 @@ chrome.runtime.onConnect.addListener((port) => {
     }
 
     if (msg?.type === 'RECORDING_STATE') {
-      lastKnownRecording = !!msg.recording
-      recordingStartTime = msg.startTime || (lastKnownRecording ? Date.now() : 0)
-      setBadge(lastKnownRecording)
-      try {
-        (chrome.storage as any)?.session?.set?.({
-          recording: lastKnownRecording,
-          recordingStartTime
-        }).catch?.(() => {})
-      } catch {}
-      chrome.runtime.sendMessage({
-        type: 'RECORDING_STATE',
-        recording: lastKnownRecording,
-        startTime: recordingStartTime
-      }).catch(() => {})
+      broadcastRecordingState(!!msg.recording, msg.startTime)
     }
 
     if (msg?.type === 'OFFSCREEN_SAVE') {
@@ -112,9 +132,7 @@ chrome.runtime.onConnect.addListener((port) => {
     bglog('Offscreen disconnected')
     offscreenPort = null
     offscreenReady = false
-    setBadge(false)
-    lastKnownRecording = false
-    recordingStartTime = 0
+    broadcastRecordingState(false, 0)
   })
 })
 
@@ -192,9 +210,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         bglog('postToOffscreen(OFFSCREEN_START) response', r)
 
         if (r?.ok) {
-          lastKnownRecording = true
-          setBadge(true)
-          chrome.runtime.sendMessage({ type: 'RECORDING_STATE', recording: true }).catch(() => {})
+          broadcastRecordingState(true, Date.now())
 
           // Query initial mute state from Google Meet tab
           try {
@@ -223,6 +239,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           const r = await postToOffscreen({ type: 'OFFSCREEN_STOP' })
           bglog('postToOffscreen(OFFSCREEN_STOP) response', r)
         }
+        broadcastRecordingState(false, 0)
         sendResponse({ ok: true })
       } catch (e: any) {
         sendResponse({ ok: false, error: `STOP failed: ${e?.message || e}` })
@@ -246,6 +263,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           if (offscreenPort) {
             await postToOffscreen({ type: 'OFFSCREEN_STOP' })
           }
+          broadcastRecordingState(false, 0)
           sendResponse({ ok: true, action: 'stopped' })
         } catch (e: any) {
           sendResponse({ ok: false, error: String(e) })
@@ -257,10 +275,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           const streamId = await getStreamIdForTab(tabId)
           const r = await postToOffscreen({ type: 'OFFSCREEN_START', streamId })
           if (r?.ok) {
-            lastKnownRecording = true
-            recordingStartTime = Date.now()
-            setBadge(true)
-            chrome.runtime.sendMessage({ type: 'RECORDING_STATE', recording: true, startTime: recordingStartTime }).catch(() => {})
+            broadcastRecordingState(true, Date.now())
             sendResponse({ ok: true, action: 'started' })
           } else {
             sendResponse({ ok: false, error: r?.error || 'Failed to start' })
