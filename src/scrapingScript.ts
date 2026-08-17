@@ -237,391 +237,28 @@ function isMeetingCallLive(): boolean {
   }
 }
 
-function isInsideMeetingRoom(): boolean {
-  try {
-    const path = window.location.pathname;
-    return /\/([a-z]{3}-[a-z]{4}-[a-z]{3})/i.test(path) || (path.length > 5 && path !== '/' && !path.startsWith('/landing') && !path.startsWith('/home'));
-  } catch {
-    return false;
-  }
-}
-
-let lastLiveState = false;
-let currentMeetingId = getGoogleMeetingId();
+// Content Script for Caption Scraping, Mute Detection, and Call Lifecycle
+let lastLiveState = false
+let currentMeetingId = getGoogleMeetingId()
 
 function checkLiveMeetingState() {
-  const isLive = isMeetingCallLive();
-  const meetId = getGoogleMeetingId() || currentMeetingId;
-  const inRoom = isInsideMeetingRoom();
-
-  const hudContainer = document.getElementById('gmeet-rec-hud-container');
-  const label = document.getElementById('gmeet-rec-label');
-
-  if (inRoom) {
-    if (hudContainer) hudContainer.style.display = 'flex';
-    if (label && !inMeetingTimerInterval) {
-      label.textContent = meetId ? `Record Meeting (${meetId})` : 'Record Meeting';
-    }
-  } else {
-    // Hide HUD completely when on Google Meet home page
-    if (hudContainer) hudContainer.style.display = 'none';
-  }
+  const isLive = isMeetingCallLive()
+  const meetId = getGoogleMeetingId() || currentMeetingId
 
   if (isLive !== lastLiveState || meetId !== currentMeetingId) {
-    lastLiveState = isLive;
-    currentMeetingId = meetId;
-
-    if (isLive && inRoom) {
-      showMeetToast(`⚡ Google Meet ${meetId ? `(${meetId})` : ''} is LIVE — Recording Ready`);
-    }
+    lastLiveState = isLive
+    currentMeetingId = meetId
 
     chrome.runtime.sendMessage({
       type: 'MEET_LIVE_STATE',
-      isLive: isLive && inRoom,
-      meetingId: inRoom ? meetId : null
-    }).catch(() => {});
+      isLive,
+      meetingId: meetId
+    }).catch(() => {})
   }
 }
 
-// In-Meeting Google Meet Native Recording HUD & UI Overlay
-let inMeetingTimerInterval: number | null = null
-let inMeetingStartTime = 0
-let isLocalRecordingActive = false
-
-function createInMeetingUI() {
-  if (document.getElementById('gmeet-rec-hud-container')) return
-
-  // Retrieve saved position or default to top-left
-  let savedTop = localStorage.getItem('meet_hud_top') || '16px'
-  let savedLeft = localStorage.getItem('meet_hud_left') || '24px'
-
-  const container = document.createElement('div')
-  container.id = 'gmeet-rec-hud-container'
-  container.style.cssText = `
-    position: fixed;
-    top: ${savedTop};
-    left: ${savedLeft};
-    z-index: 9999999;
-    display: ${isInsideMeetingRoom() ? 'flex' : 'none'};
-    align-items: center;
-    gap: 8px;
-    font-family: 'Google Sans', Roboto, -apple-system, sans-serif;
-    user-select: none;
-    cursor: grab;
-    touch-action: none;
-  `
-
-  const pill = document.createElement('div')
-  pill.id = 'gmeet-rec-pill'
-  pill.style.cssText = `
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    background: rgba(18, 20, 28, 0.92);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 9999px;
-    padding: 8px 18px;
-    color: #ffffff;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
-    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-  `
-
-  // Drag icon
-  const dragHandle = document.createElement('span')
-  dragHandle.id = 'gmeet-rec-drag-handle'
-  dragHandle.textContent = '⠿'
-  dragHandle.style.cssText = `
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.4);
-    cursor: grab;
-    margin-right: -2px;
-  `
-
-  const dot = document.createElement('span')
-  dot.id = 'gmeet-rec-dot'
-  dot.style.cssText = `
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background-color: #94a3b8;
-    display: inline-block;
-    transition: all 0.25s ease;
-  `
-
-  const meetId = getGoogleMeetingId() || currentMeetingId
-  const label = document.createElement('span')
-  label.id = 'gmeet-rec-label'
-  label.textContent = meetId ? `Record Meeting (${meetId})` : 'Record Meeting'
-  label.style.cssText = `
-    letter-spacing: -0.2px;
-    font-weight: 600;
-  `
-
-  const timerSpan = document.createElement('span')
-  timerSpan.id = 'gmeet-rec-timer'
-  timerSpan.style.cssText = `
-    display: none;
-    font-family: 'Roboto Mono', 'JetBrains Mono', monospace;
-    font-size: 13px;
-    font-weight: 700;
-    color: #fda4af;
-    letter-spacing: 0.5px;
-  `
-
-  const micStatusSpan = document.createElement('span')
-  micStatusSpan.id = 'gmeet-rec-mic-status'
-  micStatusSpan.style.cssText = `
-    display: none;
-    font-size: 11px;
-    font-weight: 600;
-    margin-left: 2px;
-    padding: 2px 8px;
-    border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.12);
-    transition: all 0.2s ease;
-  `
-
-  pill.appendChild(dragHandle)
-  pill.appendChild(dot)
-  pill.appendChild(label)
-  pill.appendChild(timerSpan)
-  pill.appendChild(micStatusSpan)
-
-  // Drag-and-drop movement logic
-  let isDragging = false
-  let hasMoved = false
-  let startX = 0
-  let startY = 0
-  let initialLeft = 0
-  let initialTop = 0
-
-  const onMouseDown = (e: MouseEvent) => {
-    isDragging = true
-    hasMoved = false
-    startX = e.clientX
-    startY = e.clientY
-    const rect = container.getBoundingClientRect()
-    initialLeft = rect.left
-    initialTop = rect.top
-    container.style.cursor = 'grabbing'
-    pill.style.cursor = 'grabbing'
-    dragHandle.style.cursor = 'grabbing'
-    e.preventDefault()
-  }
-
-  const onMouseMove = (e: MouseEvent) => {
-    if (!isDragging) return
-    const dx = e.clientX - startX
-    const dy = e.clientY - startY
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-      hasMoved = true
-    }
-
-    let newLeft = Math.max(10, Math.min(window.innerWidth - container.offsetWidth - 10, initialLeft + dx))
-    let newTop = Math.max(10, Math.min(window.innerHeight - container.offsetHeight - 10, initialTop + dy))
-
-    container.style.left = `${newLeft}px`
-    container.style.top = `${newTop}px`
-  }
-
-  const onMouseUp = () => {
-    if (!isDragging) return
-    isDragging = false
-    container.style.cursor = 'grab'
-    pill.style.cursor = 'pointer'
-    dragHandle.style.cursor = 'grab'
-
-    if (hasMoved) {
-      localStorage.setItem('meet_hud_top', container.style.top)
-      localStorage.setItem('meet_hud_left', container.style.left)
-    }
-  }
-
-  container.addEventListener('mousedown', onMouseDown)
-  window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('mouseup', onMouseUp)
-
-  // Click to start / stop recording
-  pill.addEventListener('click', (e) => {
-    if (hasMoved) {
-      e.stopPropagation()
-      return
-    }
-
-    // Instantly toggle visual state so user sees immediate blinking red dot and timer
-    const willStart = !isLocalRecordingActive
-    updateInMeetingHUD(willStart, Date.now())
-
-    if (willStart) {
-      showMeetToast('🔴 Starting HD Meeting Recording...')
-    }
-
-    chrome.runtime.sendMessage({ type: 'CONTENT_TOGGLE_RECORDING' }, (res) => {
-      if (res?.action === 'started') {
-        updateInMeetingHUD(true, Date.now())
-        showMeetToast('🔴 Google Meet Recording LIVE')
-      } else if (res?.action === 'stopped') {
-        updateInMeetingHUD(false)
-        showMeetToast('⏹ Recording saved to Downloads')
-      } else if (res?.error) {
-        updateInMeetingHUD(false)
-        showMeetToast(`Recording error: ${res.error}`)
-      }
-    })
-  })
-
-  container.appendChild(pill)
-  document.body.appendChild(container)
-}
-
-function updateInMeetingHUD(recording: boolean, startTime?: number) {
-  createInMeetingUI()
-  isLocalRecordingActive = recording
-  const pill = document.getElementById('gmeet-rec-pill')
-  const dot = document.getElementById('gmeet-rec-dot')
-  const label = document.getElementById('gmeet-rec-label')
-  const timerSpan = document.getElementById('gmeet-rec-timer')
-  const micStatusSpan = document.getElementById('gmeet-rec-mic-status')
-
-  if (!pill || !dot || !label || !timerSpan) return
-
-  const meetId = getGoogleMeetingId() || currentMeetingId;
-
-  if (recording) {
-    pill.style.background = 'rgba(28, 18, 22, 0.95)'
-    pill.style.border = '1.5px solid #ef4444'
-    pill.style.boxShadow = '0 0 20px rgba(239, 68, 68, 0.5), 0 8px 32px rgba(0, 0, 0, 0.6)'
-    
-    dot.style.backgroundColor = '#ef4444'
-    dot.style.boxShadow = '0 0 12px #ef4444'
-    dot.style.animation = 'meet-pulse 0.9s infinite alternate'
-
-    label.textContent = meetId ? `REC (${meetId})` : 'REC'
-    timerSpan.style.display = 'inline'
-    if (micStatusSpan) {
-      micStatusSpan.style.display = 'inline'
-      const isMuted = checkGoogleMeetMicMuted()
-      micStatusSpan.textContent = isMuted ? '• 🔇 Mic Muted' : '• 🎙️ Mic Live'
-      micStatusSpan.style.color = isMuted ? '#fca5a5' : '#86efac'
-    }
-
-    inMeetingStartTime = startTime && startTime > 0 ? startTime : Date.now()
-    if (inMeetingTimerInterval) clearInterval(inMeetingTimerInterval)
-
-    const updateTimer = () => {
-      const elapsed = Date.now() - inMeetingStartTime
-      const totalSec = Math.max(0, Math.floor(elapsed / 1000))
-      const h = Math.floor(totalSec / 3600)
-      const m = Math.floor((totalSec % 3600) / 60)
-      const s = totalSec % 60
-      timerSpan.textContent = [
-        h > 0 ? h.toString().padStart(2, '0') : null,
-        m.toString().padStart(2, '0'),
-        s.toString().padStart(2, '0')
-      ].filter(Boolean).join(':')
-    }
-    updateTimer()
-    inMeetingTimerInterval = window.setInterval(updateTimer, 500)
-  } else {
-    pill.style.background = 'rgba(18, 20, 28, 0.92)'
-    pill.style.border = '1px solid rgba(255, 255, 255, 0.18)'
-    pill.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)'
-    
-    dot.style.backgroundColor = '#94a3b8'
-    dot.style.boxShadow = 'none'
-    dot.style.animation = 'none'
-
-    label.textContent = meetId ? `Record Meeting (${meetId})` : 'Record Meeting'
-    timerSpan.style.display = 'none'
-    if (micStatusSpan) {
-      micStatusSpan.style.display = 'none'
-    }
-
-    if (inMeetingTimerInterval) {
-      clearInterval(inMeetingTimerInterval)
-      inMeetingTimerInterval = null
-    }
-  }
-}
-
-// In-Meeting native toast banner
-function showMeetToast(msg: string) {
-  const existing = document.getElementById('gmeet-rec-toast')
-  if (existing) existing.remove()
-
-  const toast = document.createElement('div')
-  toast.id = 'gmeet-rec-toast'
-  toast.textContent = msg
-  toast.style.cssText = `
-    position: fixed;
-    bottom: 90px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(32, 33, 36, 0.95);
-    backdrop-filter: blur(8px);
-    color: #ffffff;
-    font-family: 'Google Sans', Roboto, sans-serif;
-    font-size: 13.5px;
-    font-weight: 500;
-    padding: 10px 22px;
-    border-radius: 8px;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    z-index: 999999;
-    animation: meet-toast-in 0.25s ease;
-  `
-  document.body.appendChild(toast)
-  setTimeout(() => toast.remove(), 4000)
-}
-
-// CSS Animations injection
-const styleTag = document.createElement('style')
-styleTag.textContent = `
-  @keyframes meet-pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.35); opacity: 0.5; }
-  }
-  @keyframes meet-toast-in {
-    from { opacity: 0; transform: translate(-50%, 10px); }
-    to { opacity: 1; transform: translate(-50%, 0); }
-  }
-`
-document.head.appendChild(styleTag)
-
-// Initialize in-meeting HUD when joining call
-function initMeetingHUD() {
-  createInMeetingUI()
-  checkLiveMeetingState()
-  chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATUS' }, (res) => {
-    if (!chrome.runtime.lastError && res) {
-      updateInMeetingHUD(!!res.recording, res.startTime)
-    }
-  })
-}
-
-// Sync HUD on recording state broadcast and handle popup queries
+// Handle popup queries
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type === 'RECORDING_STATE') {
-    updateInMeetingHUD(!!msg.recording, msg.startTime)
-    if (msg.recording) {
-      showMeetToast('🔴 Google Meet Recording active')
-    }
-  }
-  if (msg?.type === 'SET_MIC_MUTED_FROM_POPUP') {
-    const isMuted = !!msg.muted
-    lastMuteState = isMuted
-    const micStatusSpan = document.getElementById('gmeet-rec-mic-status')
-    if (micStatusSpan) {
-      micStatusSpan.textContent = isMuted ? '• 🔇 Mic Muted' : '• 🎙️ Mic Live'
-      micStatusSpan.style.color = isMuted ? '#fca5a5' : '#86efac'
-    }
-    showMeetToast(isMuted ? '🔇 Microphone Muted in recording' : '🎙️ Microphone Live in recording')
-  }
   if (msg?.type === 'QUERY_MEET_STATUS') {
     sendResponse({
       isLive: isMeetingCallLive(),
@@ -631,14 +268,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 })
 
-// Auto-inject HUD and start live state poller
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initMeetingHUD)
-} else {
-  initMeetingHUD()
-}
-
-// High-frequency live state poller (checks every 500ms)
+// High-frequency live state poller
 setInterval(checkLiveMeetingState, 500)
 
 // Auto-stop when user clicks Leave Call (hang up)
@@ -655,6 +285,6 @@ window.addEventListener('click', (e) => {
   setTimeout(checkLiveMeetingState, 200)
 }, true)
 
-console.log('MeetStudio in-meeting controller loaded')
+console.log('MeetStudio in-meeting caption & mute controller loaded')
 
 
