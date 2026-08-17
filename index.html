@@ -338,55 +338,6 @@
       background: var(--indigo-primary);
     }
 
-    /* Live Web Recorder Section */
-    .recorder-box {
-      background: var(--bg-card);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-lg);
-      padding: 40px;
-      max-width: 720px;
-      margin: 0 auto 72px;
-      box-shadow: var(--shadow-elevation);
-      text-align: center;
-    }
-
-    .recorder-timer {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 54px;
-      font-weight: 700;
-      letter-spacing: 2px;
-      color: var(--text-main);
-      margin: 16px 0;
-      text-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-    }
-
-    .recorder-timer.active {
-      color: #fda4af;
-      text-shadow: 0 0 24px rgba(244, 63, 94, 0.6);
-    }
-
-    .recorder-status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 12px;
-      border-radius: var(--radius-pill);
-      font-size: 12px;
-      font-weight: 600;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-subtle);
-      color: var(--text-muted);
-      margin-bottom: 20px;
-    }
-
-    .recorder-status-badge.active {
-      background: rgba(239, 68, 68, 0.15);
-      border-color: rgba(239, 68, 68, 0.4);
-      color: #fca5a5;
-    }
-
     /* Feature Grid */
     .feature-grid {
       display: grid;
@@ -460,7 +411,7 @@
       </a>
       <div class="nav-links">
         <a href="#setup-guide" class="nav-link">Setup Guide</a>
-        <a href="#web-recorder" class="nav-link">Web Recorder</a>
+        <a href="#features" class="nav-link">Features</a>
         <a href="meetstudio-extension.zip" download="meetstudio-extension.zip" class="btn btn-primary" style="padding: 9px 18px; font-size: 13px;">
           ⬇️ Download (.ZIP)
         </a>
@@ -481,20 +432,13 @@
       </p>
 
       <div class="cta-row">
-        <a href="meetstudio-extension.zip" download="meetstudio-extension.zip" class="btn btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <a href="meetstudio-extension.zip" download="meetstudio-extension.zip" class="btn btn-primary" style="padding: 16px 36px; font-size: 16px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
           Download Chrome Extension (.ZIP)
-        </a>
-        <a href="#web-recorder" class="btn btn-secondary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
-          </svg>
-          Try Online Web Recorder
         </a>
       </div>
     </section>
@@ -540,45 +484,8 @@
       </div>
     </section>
 
-    <!-- Live Web Recorder Demo -->
-    <section id="web-recorder">
-      <div class="section-header">
-        <h2 class="section-title">Instant Browser Web Recorder</h2>
-        <p class="section-subtitle">Need to record right now without installing anything? Use the zero-install web studio:</p>
-      </div>
-
-      <div class="recorder-box">
-        <div id="web-status-badge" class="recorder-status-badge">
-          <span>●</span> <span id="web-status-text">Standby</span>
-        </div>
-
-        <div id="web-timer" class="recorder-timer">00:00:00</div>
-
-        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-          <button id="web-start-btn" class="btn btn-primary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <circle cx="12" cy="12" r="3.5" fill="currentColor"></circle>
-            </svg>
-            Select Tab & Start Recording
-          </button>
-
-          <button id="web-stop-btn" class="btn btn-primary" style="background: var(--crimson-gradient); display: none;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"></rect>
-            </svg>
-            Stop & Download Video (.webm)
-          </button>
-        </div>
-
-        <p style="font-size: 12px; color: var(--text-faint); margin-top: 18px;">
-          Note: Choose "Chrome Tab" and check "Share tab audio" when prompted to capture meeting participants.
-        </p>
-      </div>
-    </section>
-
     <!-- Features Grid -->
-    <section>
+    <section id="features">
       <div class="section-header">
         <h2 class="section-title">Engineered for Precision</h2>
         <p class="section-subtitle">Everything you need for perfect Google Meet archives</p>
@@ -641,131 +548,11 @@
   </div>
 
   <script>
-    // Copy helper
     function copyText(text) {
       navigator.clipboard.writeText(text).then(() => {
         alert('Copied to clipboard: ' + text);
       });
     }
-
-    // Web Recorder Engine (Standard Web APIs on Vercel)
-    let webRecorder = null;
-    let webChunks = [];
-    let webTimerInterval = null;
-    let webStartTime = 0;
-
-    const webStartBtn = document.getElementById('web-start-btn');
-    const webStopBtn = document.getElementById('web-stop-btn');
-    const webTimer = document.getElementById('web-timer');
-    const webStatusBadge = document.getElementById('web-status-badge');
-    const webStatusText = document.getElementById('web-status-text');
-
-    function formatTime(ms) {
-      const sec = Math.floor(ms / 1000);
-      const h = Math.floor(sec / 3600);
-      const m = Math.floor((sec % 3600) / 60);
-      const s = sec % 60;
-      return [
-        h > 0 ? h.toString().padStart(2, '0') : null,
-        m.toString().padStart(2, '0'),
-        s.toString().padStart(2, '0')
-      ].filter(Boolean).join(':');
-    }
-
-    webStartBtn.addEventListener('click', async () => {
-      try {
-        // 1. Capture screen / tab
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: { ideal: 30 } },
-          audio: true
-        });
-
-        // 2. Capture mic
-        let micStream = null;
-        try {
-          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch (e) {
-          console.warn('Mic not permitted, continuing with tab audio');
-        }
-
-        // 3. Mix audio streams with Web Audio API
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const dest = audioCtx.createMediaStreamDestination();
-
-        if (displayStream.getAudioTracks().length > 0) {
-          const tabSrc = audioCtx.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
-          tabSrc.connect(dest);
-        }
-        if (micStream && micStream.getAudioTracks().length > 0) {
-          const micSrc = audioCtx.createMediaStreamSource(new MediaStream([micStream.getAudioTracks()[0]]));
-          const micGain = audioCtx.createGain();
-          micGain.gain.value = 1.3;
-          micSrc.connect(micGain);
-          micGain.connect(dest);
-        }
-
-        const mixedStream = new MediaStream([
-          ...displayStream.getVideoTracks(),
-          ...dest.stream.getAudioTracks()
-        ]);
-
-        webChunks = [];
-        let mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' : 'video/webm';
-        webRecorder = new MediaRecorder(mixedStream, { mimeType: mime });
-
-        webRecorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) webChunks.push(e.data);
-        };
-
-        webRecorder.onstop = () => {
-          const blob = new Blob(webChunks, { type: mime });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `web-recording-${Date.now()}.webm`;
-          a.click();
-
-          mixedStream.getTracks().forEach(t => t.stop());
-          displayStream.getTracks().forEach(t => t.stop());
-          if (micStream) micStream.getTracks().forEach(t => t.stop());
-          audioCtx.close();
-
-          webStartBtn.style.display = 'inline-flex';
-          webStopBtn.style.display = 'none';
-          webStatusBadge.classList.remove('active');
-          webStatusText.textContent = 'Standby';
-          webTimer.classList.remove('active');
-          clearInterval(webTimerInterval);
-          webTimer.textContent = '00:00:00';
-        };
-
-        webRecorder.start(1000);
-        webStartTime = Date.now();
-
-        webStartBtn.style.display = 'none';
-        webStopBtn.style.display = 'inline-flex';
-        webStatusBadge.classList.add('active');
-        webStatusText.textContent = 'Recording Live';
-        webTimer.classList.add('active');
-
-        webTimerInterval = setInterval(() => {
-          webTimer.textContent = formatTime(Date.now() - webStartTime);
-        }, 500);
-
-        displayStream.getVideoTracks()[0].addEventListener('ended', () => {
-          if (webRecorder && webRecorder.state !== 'inactive') webRecorder.stop();
-        });
-
-      } catch (err) {
-        alert('Could not start recording: ' + err.message);
-      }
-    });
-
-    webStopBtn.addEventListener('click', () => {
-      if (webRecorder && webRecorder.state !== 'inactive') {
-        webRecorder.stop();
-      }
-    });
   </script>
 </body>
 </html>
