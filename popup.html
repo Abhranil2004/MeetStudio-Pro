@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MeetStudio - Pro Google Meet Recording</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #090d16;
+      --bg-surface: #111726;
+      --bg-card: rgba(19, 27, 44, 0.7);
+      --bg-card-hover: rgba(28, 38, 62, 0.85);
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-active: rgba(99, 102, 241, 0.4);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-faint: #64748b;
+      --indigo-primary: #6366f1;
+      --indigo-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #ec4899 100%);
+      --indigo-glow: rgba(99, 102, 241, 0.35);
+      --crimson-primary: #ef4444;
+      --crimson-gradient: linear-gradient(135deg, #ef4444 0%, #f43f5e 100%);
+      --crimson-glow: rgba(239, 68, 68, 0.45);
+      --emerald-accent: #10b981;
+      --amber-accent: #f59e0b;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 9999px;
+      --shadow-elevation: 0 12px 36px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      --transition-spring: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      width: 356px;
+      min-height: 480px;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-base);
+      background-image: 
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 50% 120%, rgba(236, 72, 153, 0.12) 0%, transparent 60%);
+      color: var(--text-main);
+      padding: 16px;
+      overflow-x: hidden;
+    }
+
+    /* Executive Top Bar */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .brand-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      background: var(--indigo-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 14px var(--indigo-glow);
+      color: #fff;
+    }
+
+    .brand-logo svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .brand-name {
+      font-size: 14.5px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: #ffffff;
+      line-height: 1.1;
+    }
+
+    .brand-tag {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--indigo-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      transition: var(--transition-spring);
+    }
+
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--text-faint);
+      transition: var(--transition-spring);
+    }
+
+    .status-badge.recording {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+
+    .status-badge.recording .dot {
+      background-color: var(--crimson-primary);
+      box-shadow: 0 0 8px var(--crimson-primary);
+      animation: pulse-ring 1.4s infinite;
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.4; }
+    }
+
+    /* Warning Notice (Non-Meet) */
+    .meet-alert {
+      display: none;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      margin-bottom: 12px;
+      animation: fade-down 0.2s ease;
+    }
+
+    .meet-alert.visible {
+      display: block;
+    }
+
+    .meet-alert-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #fbbf24;
+      font-size: 11.5px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .meet-alert-title svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .meet-alert-text {
+      font-size: 11px;
+      color: #fde68a;
+      line-height: 1.35;
+      margin-bottom: 8px;
+    }
+
+    .btn-action-amber {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 11.5px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      background: #f59e0b;
+      color: #0f172a;
+      transition: var(--transition-spring);
+    }
+
+    .btn-action-amber:hover {
+      background: #d97706;
+      transform: translateY(-1px);
+    }
+
+    /* Studio Main Card */
+    .studio-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow-elevation);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .studio-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+    }
+
+    .meeting-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .meeting-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-faint);
+    }
+
+    .meeting-code-pill {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #a5b4fc;
+      background: rgba(99, 102, 241, 0.14);
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      max-width: 150px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    /* Stopwatch Display */
+    .timer-center {
+      text-align: center;
+      padding: 6px 0 10px;
+    }
+
+    .timer-digits {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 34px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-main);
+      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      transition: var(--transition-spring);
+    }
+
+    .timer-digits.recording {
+      color: #fda4af;
+      text-shadow: 0 0 20px rgba(244, 63, 94, 0.5);
+    }
+
+    /* Audio Equalizer & Mic Monitor */
+    .audio-monitor-strip {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .monitor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .mic-live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #6ee7b7;
+      transition: var(--transition-spring);
+    }
+
+    .mic-live-indicator.muted {
+      color: #f87171;
+    }
+
+    .meter-bar-track {
+      width: 100%;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-pill);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .meter-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #10b981 0%, #6366f1 70%, #f43f5e 100%);
+      border-radius: var(--radius-pill);
+      transition: width 0.07s ease-out;
+    }
+
+    /* Mute / Unmute Interactive Toggle */
+    .btn-mute-toggle {
+      width: 100%;
+      padding: 9px 14px;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+      transition: var(--transition-spring);
+      outline: none;
+    }
+
+    .btn-mute-toggle:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .btn-mute-toggle.unmuted {
+      border-color: rgba(16, 185, 129, 0.25);
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    .btn-mute-toggle.unmuted:hover {
+      background: rgba(16, 185, 129, 0.14);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-mute-toggle.muted {
+      border-color: rgba(239, 68, 68, 0.35);
+      background: rgba(239, 68, 68, 0.12);
+      color: #fca5a5;
+    }
+
+    .btn-mute-toggle.muted:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.5);
+    }
+
+    .btn-mute-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .btn-mute-left svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .mute-status-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-mute-toggle.unmuted .mute-status-tag {
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
+    }
+
+    .btn-mute-toggle.muted .mute-status-tag {
+      background: rgba(239, 68, 68, 0.25);
+      color: #fca5a5;
+    }
+
+    /* Action Buttons */
+    .cta-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .btn-main {
+      width: 100%;
+      padding: 13px 18px;
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      transition: var(--transition-spring);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-main:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .btn-record {
+      background: var(--indigo-gradient);
+      color: #ffffff;
+      box-shadow: 0 4px 18px var(--indigo-glow);
+    }
+
+    .btn-record:hover:not(:disabled) {
+      transform: translateY(-1.5px);
+      box-shadow: 0 6px 24px rgba(99, 102, 241, 0.55);
+    }
+
+    .btn-stop {
+      background: var(--crimson-gradient);
+      color: #ffffff;
+      box-shadow: 0 4px 18px var(--crimson-glow);
+      animation: stop-pulse 1.8s infinite;
+    }
+
+    .btn-stop:hover:not(:disabled) {
+      transform: translateY(-1.5px);
+      box-shadow: 0 6px 24px rgba(239, 68, 68, 0.65);
+    }
+
+    @keyframes stop-pulse {
+      0%, 100% { box-shadow: 0 0 14px var(--crimson-glow); }
+      50% { box-shadow: 0 0 24px rgba(239, 68, 68, 0.7); }
+    }
+
+    .btn-sub {
+      width: 100%;
+      padding: 11px 16px;
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: var(--transition-spring);
+    }
+
+    .btn-sub:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .btn-sub:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Privacy Footer */
+    .footer-privacy {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 10.5px;
+      font-weight: 500;
+      color: var(--text-faint);
+      padding-top: 4px;
+      text-align: center;
+    }
+
+    .footer-privacy svg {
+      width: 12px;
+      height: 12px;
+      color: var(--emerald-accent);
+    }
+
+    /* Toast */
+    .toast-pill {
+      position: fixed;
+      bottom: 14px;
+      left: 16px;
+      right: 16px;
+      padding: 10px 14px;
+      background: rgba(17, 23, 38, 0.96);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-active);
+      border-radius: var(--radius-md);
+      font-size: 12px;
+      font-weight: 500;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      transform: translateY(70px);
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 999;
+    }
+
+    .toast-pill.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    @keyframes fade-down {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"></polygon>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">MeetStudio</div>
+        <div class="brand-tag">Studio HD</div>
+      </div>
+    </div>
+    <div id="status-pill" class="status-badge">
+      <span class="dot"></span>
+      <span id="status-text">Standby</span>
+    </div>
+  </header>
+
+  <!-- Non-Google Meet Alert -->
+  <div id="meet-notice" class="meet-alert">
+    <div class="meet-alert-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+      <span>Google Meet Required</span>
+    </div>
+    <div class="meet-alert-text">
+      Recording and transcripts are restricted only to Google Meet calls.
+    </div>
+    <button id="btn-open-meet" class="btn-action-amber">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <line x1="10" y1="14" x2="21" y2="3"></line>
+      </svg>
+      Switch to / Open Google Meet
+    </button>
+  </div>
+
+  <!-- Studio Hero Card -->
+  <section class="studio-card">
+    <div class="meeting-meta-row">
+      <span class="meeting-label">Meeting Session</span>
+      <span id="meet-badge" class="meeting-code-pill">Detecting Meet...</span>
+    </div>
+
+    <!-- Live Timer Display -->
+    <div class="timer-center">
+      <div id="timer" class="timer-digits">00:00:00</div>
+    </div>
+
+    <!-- Live Voice Level Strip & Mute Toggle -->
+    <div class="audio-monitor-strip">
+      <div class="monitor-header">
+        <span>Mic Voice Activity</span>
+        <span id="vu-level-text" class="mic-live-indicator">Auto-Synced with Meet</span>
+      </div>
+      <div class="meter-bar-track">
+        <div id="meter-fill" class="meter-bar-fill"></div>
+      </div>
+      
+      <!-- Interactive Mute / Unmute Button -->
+      <button id="btn-toggle-mute" class="btn-mute-toggle unmuted">
+        <div class="btn-mute-left">
+          <svg id="mute-icon-unmuted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+          <svg id="mute-icon-muted" style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+            <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+            <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+          <span id="mute-btn-text">Microphone Live (Click to Mute)</span>
+        </div>
+        <span id="mute-status-tag" class="mute-status-tag">LIVE</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Action Controls -->
+  <div class="cta-group">
+    <button id="start-rec" class="btn-main btn-record">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <circle cx="12" cy="12" r="3.5" fill="currentColor"></circle>
+      </svg>
+      Start HD Recording
+    </button>
+
+    <button id="stop-rec" class="btn-main btn-stop" disabled style="display: none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"></rect>
+      </svg>
+      Stop & Save Video (.webm)
+    </button>
+
+    <button id="save" class="btn-sub">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+      </svg>
+      Download Meeting Transcript (.txt)
+    </button>
+  </div>
+
+  <!-- Privacy Badge -->
+  <footer class="footer-privacy">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+    </svg>
+    <span>100% Local & Isolated • Privacy First</span>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast-pill">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+    <span id="toast-message">Ready</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "MeetStudio Pro - Google Meet Recorder & Transcriber",
+  "version": "2.0.0",
+  "description": "Professional HD video recorder for Google Meet with isolated tab audio, dynamic mic mute sync, real-time Closed Caption transcripts, and studio audio enhancement.",
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "tabCapture",
+    "offscreen",
+    "storage",
+    "tabs",
+    "desktopCapture"
+  ],
+  "host_permissions": [
+    "https://meet.google.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "MeetStudio Pro Recorder"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://meet.google.com/*"
+      ],
+      "js": [
+        "scrapingScript.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "offscreen.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}
