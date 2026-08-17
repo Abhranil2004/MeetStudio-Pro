@@ -4,8 +4,8 @@
   "description": "MeetStudio Pro - Executive Google Meet HD Screen Recorder & Live Caption Transcriber with Isolated Audio Mixing and Dynamic Mute Synchronization.",
   "main": "webpack.config.js",
   "scripts": {
-    "build": "webpack --mode=production",
-    "package": "webpack --mode=production && powershell Compress-Archive -Path dist\\* -DestinationPath meetstudio-extension.zip -Force",
+    "build": "webpack --mode=production && node scripts/package.js",
+    "package": "webpack --mode=production && node scripts/package.js",
     "dev": "webpack --watch --mode=development",
     "watch": "webpack --watch"
   },
